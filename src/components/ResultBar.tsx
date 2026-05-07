@@ -4,27 +4,29 @@ import { computeDirections } from '../lib/directions'
 import type { Directions } from '../lib/directions'
 
 const MAG: Record<string, string> = {
-  tiny: 'very slightly', small: 'slightly', medium: '', large: 'a lot',
+  tiny: 'nudge', small: 'slide slightly', medium: 'slide', large: 'slide a lot',
 }
 
 function hueText(d: Directions['hue']): string {
   if (d.direction === 'none') return ''
-  const m = MAG[d.magnitude]
-  return `Hue: slide ${m ? m + ' ' : ''}${d.direction} toward ${d.targetColorName}`
+  // The tool's hue slider runs reversed: red→pink→purple→blue going right,
+  // so "need more hue" (direction: right in HSV) = move slider LEFT physically.
+  const physicalDir = d.direction === 'right' ? 'left' : 'right'
+  return `Bottom slider: ${MAG[d.magnitude]} ${physicalDir} toward ${d.targetColorName}`
 }
 
 function boxText(d: Directions): string {
   const { saturation: s, value: v } = d
-  const dirs = [
-    v.direction !== 'none' ? (v.direction === 'up' ? 'up' : 'down') : '',
-    s.direction !== 'none' ? (s.direction === 'right' ? 'right' : 'left') : '',
-  ].filter(Boolean)
-  if (!dirs.length) return ''
-  const descs = [
-    v.direction !== 'none' ? (v.direction === 'up' ? 'lighter' : 'darker') : '',
-    s.direction !== 'none' ? (s.direction === 'right' ? 'more sat.' : 'less sat.') : '',
-  ].filter(Boolean)
-  return `Box: move ${dirs.join(' & ')} — ${descs.join(', ')}`
+  // Box axes: X = saturation (right = more color), Y = value (up = brighter)
+  const vertDir = v.direction !== 'none' ? (v.direction === 'up' ? 'up' : 'down') : ''
+  const horizDir = s.direction !== 'none' ? (s.direction === 'right' ? 'right' : 'left') : ''
+  const vertDesc = v.direction !== 'none' ? (v.direction === 'up' ? 'brighter' : 'darker') : ''
+  const horizDesc = s.direction !== 'none' ? (s.direction === 'right' ? 'more color' : 'less color') : ''
+
+  const dirs = [vertDir, horizDir].filter(Boolean).join('-')
+  const descs = [vertDesc, horizDesc].filter(Boolean).join(', ')
+  if (!dirs) return ''
+  return `Top box: ${dirs} — ${descs}`
 }
 
 export default function ResultBar() {
@@ -52,9 +54,7 @@ export default function ResultBar() {
         <div className="w-7 h-7 rounded border border-white/20" style={{ background: `rgb(${goalSample.r},${goalSample.g},${goalSample.b})` }} />
         <div className="w-7 h-7 rounded border border-white/20" style={{ background: `rgb(${currentSample.r},${currentSample.g},${currentSample.b})` }} />
       </div>
-      {/* Divider */}
       <div className="w-px h-6 bg-white/20 shrink-0" />
-      {/* Result */}
       {isMatch ? (
         <p className="text-green-400 font-bold text-base">✓ Match!</p>
       ) : (
