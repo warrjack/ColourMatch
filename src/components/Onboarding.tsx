@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-const SEEN_KEY = 'colorcoach-onboarding-seen'
+const SEEN_KEY = 'colorcoach-onboarding-seen-v2'
 
 export default function Onboarding() {
   const [visible, setVisible] = useState(() => !localStorage.getItem(SEEN_KEY))
@@ -14,19 +14,19 @@ export default function Onboarding() {
 
   return (
     <div className="absolute inset-0 z-50 bg-black/90 flex flex-col items-center justify-center px-6 text-white text-center">
-      <h1 className="text-2xl font-bold mb-4">Welcome to ColorCoach</h1>
-      <ol className="text-sm text-white/80 space-y-3 text-left max-w-xs list-decimal list-inside mb-6">
-        <li>Print your reference image with a <strong>~1 cm pure-white border</strong>.</li>
-        <li>Prop your phone so the camera sees both the paper and your Switch.</li>
-        <li>Freeze the frame, then tap the white border to calibrate.</li>
-        <li>Tap your goal color on the paper.</li>
-        <li>Tap the current color on the Switch screen.</li>
-        <li>Follow the on-screen directions to nudge the HSV picker.</li>
+      <h1 className="text-xl font-bold mb-4">ColorCoach</h1>
+      <ol className="text-sm text-white/80 space-y-2 text-left max-w-xs list-decimal list-inside mb-5">
+        <li>Upload a reference image on the <strong>left panel</strong>.</li>
+        <li>Point your camera at your Switch screen on the <strong>right panel</strong>.</li>
+        <li>Drag the crosshair on the image to your <strong>goal color</strong>.</li>
+        <li>Drag the crosshair on the camera to the <strong>current color</strong> on screen.</li>
+        <li>Follow the direction bar at the bottom to nudge the HSV picker.</li>
+        <li>Adjust on Switch, move the camera crosshair — repeat until matched.</li>
       </ol>
-      <p className="text-xs text-white/50 mb-6">Good lighting = better results. Neutral white light is ideal.</p>
+      <p className="text-xs text-white/40 mb-5">Good neutral lighting gives better color accuracy.</p>
       <button
         onClick={dismiss}
-        className="px-8 py-3 bg-white text-black font-semibold rounded-full text-base min-h-[44px] min-w-[44px]"
+        className="px-8 py-3 bg-white text-black font-semibold rounded-full text-sm min-h-[44px]"
       >
         Got it
       </button>
