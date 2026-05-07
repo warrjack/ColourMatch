@@ -3,6 +3,7 @@ import { useAppStore } from '../store/useAppStore'
 import { sampleColor } from '../lib/sampleColor'
 import { drawCover } from '../lib/drawCover'
 import Crosshair from './Crosshair'
+import ColorInfo from './ColorInfo'
 import type { RGB } from '../lib/sampleColor'
 
 type CameraState = 'requesting' | 'active' | 'denied' | 'unavailable'
@@ -137,6 +138,7 @@ export default function CameraPanel() {
           <p className="text-white/40 text-xs">Tap to sample current color</p>
         </div>
       )}
+      <ColorInfo color={currentSample} />
     </div>
   )
 }

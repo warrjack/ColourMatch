@@ -3,6 +3,7 @@ import { useAppStore } from '../store/useAppStore'
 import { sampleColor } from '../lib/sampleColor'
 import { drawCover } from '../lib/drawCover'
 import Crosshair from './Crosshair'
+import ColorInfo from './ColorInfo'
 
 export default function ImagePanel() {
   const { uploadedImage, goalSample, setUploadedImage } = useAppStore()
@@ -125,6 +126,7 @@ export default function ImagePanel() {
         Change
         <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
       </label>
+      <ColorInfo color={goalSample} />
     </div>
   )
 }
