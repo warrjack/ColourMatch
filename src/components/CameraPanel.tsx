@@ -1,17 +1,32 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAppStore } from '../store/useAppStore'
 import { sampleColor } from '../lib/sampleColor'
-import { drawCover } from '../lib/drawCover'
 import Crosshair from './Crosshair'
 import ColorInfo from './ColorInfo'
 import type { RGB } from '../lib/sampleColor'
 
 type CameraState = 'requesting' | 'active' | 'denied' | 'unavailable'
 
+// Maps a display-space point (from an object-cover video) back to video natural coords
+function displayToVideo(
+  px: number, py: number,
+  displayW: number, displayH: number,
+  videoW: number, videoH: number
+): { x: number; y: number } {
+  const scale = Math.max(displayW / videoW, displayH / videoH)
+  const dx = (displayW - videoW * scale) / 2
+  const dy = (displayH - videoH * scale) / 2
+  return {
+    x: Math.round((px - dx) / scale),
+    y: Math.round((py - dy) / scale),
+  }
+}
+
 export default function CameraPanel() {
   const { currentSample } = useAppStore()
+  const containerRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const samplingCanvasRef = useRef<HTMLCanvasElement>(null)
   const [cameraState, setCameraState] = useState<CameraState>('requesting')
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null)
   const cursorRef = useRef<{ x: number; y: number } | null>(null)
@@ -35,58 +50,65 @@ export default function CameraPanel() {
     return () => { stream?.getTracks().forEach(t => t.stop()) }
   }, [])
 
-  // RAF loop: draw video → sample cursor position
+  // RAF loop: only runs sampling — video renders itself natively
   useEffect(() => {
     if (cameraState !== 'active') return
     let raf: number
+
     function tick() {
       const video = videoRef.current
-      const canvas = canvasRef.current
-      if (video && canvas && video.readyState >= 2) {
-        const w = canvas.offsetWidth
-        const h = canvas.offsetHeight
-        if (canvas.width !== w || canvas.height !== h) {
-          canvas.width = w || 1
-          canvas.height = h || 1
-        }
-        const ctx = canvas.getContext('2d')!
-        drawCover(ctx, video, canvas.width, canvas.height)
+      const canvas = samplingCanvasRef.current
+      const container = containerRef.current
+      const pos = cursorRef.current
 
-        const pos = cursorRef.current
-        if (pos) {
-          const now = performance.now()
-          if (now - lastUpdateRef.current > 80) {
-            lastUpdateRef.current = now
-            const color = sampleColor(pos.x, pos.y, canvas)
-            const prev = prevColorRef.current
-            if (!prev || Math.abs(color.r - prev.r) + Math.abs(color.g - prev.g) + Math.abs(color.b - prev.b) > 2) {
-              prevColorRef.current = color
-              useAppStore.getState().setCurrentSample(color)
-            }
+      if (pos && video && canvas && container && video.readyState >= 2 && video.videoWidth > 0) {
+        const now = performance.now()
+        if (now - lastUpdateRef.current > 80) {
+          lastUpdateRef.current = now
+
+          // Keep sampling canvas matched to video's natural resolution
+          if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+            canvas.width = video.videoWidth
+            canvas.height = video.videoHeight
+          }
+          canvas.getContext('2d')!.drawImage(video, 0, 0, video.videoWidth, video.videoHeight)
+
+          // Map display cursor coords → video pixel coords
+          const { width: dw, height: dh } = container.getBoundingClientRect()
+          const mapped = displayToVideo(pos.x, pos.y, dw, dh, video.videoWidth, video.videoHeight)
+          const cx = Math.max(7, Math.min(canvas.width - 8, mapped.x))
+          const cy = Math.max(7, Math.min(canvas.height - 8, mapped.y))
+
+          const color = sampleColor(cx, cy, canvas)
+          const prev = prevColorRef.current
+          if (!prev || Math.abs(color.r - prev.r) + Math.abs(color.g - prev.g) + Math.abs(color.b - prev.b) > 2) {
+            prevColorRef.current = color
+            useAppStore.getState().setCurrentSample(color)
           }
         }
       }
+
       raf = requestAnimationFrame(tick)
     }
+
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
   }, [cameraState])
 
-  function updateCursor(e: React.PointerEvent<HTMLCanvasElement>) {
-    const canvas = canvasRef.current!
-    const rect = canvas.getBoundingClientRect()
+  function updateCursor(e: React.PointerEvent<HTMLDivElement>) {
+    const rect = containerRef.current!.getBoundingClientRect()
     const pos = { x: Math.round(e.clientX - rect.left), y: Math.round(e.clientY - rect.top) }
     setCursor(pos)
     cursorRef.current = pos
   }
 
-  function handlePointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
+  function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
     isDragging.current = true
-    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+    e.currentTarget.setPointerCapture(e.pointerId)
     updateCursor(e)
   }
 
-  function handlePointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
+  function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
     if (isDragging.current) updateCursor(e)
   }
 
@@ -107,34 +129,46 @@ export default function CameraPanel() {
   )
 
   return (
-    <div className="relative w-full h-full bg-black">
-      <video ref={videoRef} autoPlay muted playsInline className="hidden" />
-      <canvas
-        ref={canvasRef}
-        className="w-full h-full block"
-        style={{ touchAction: 'none' }}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
+    <div
+      ref={containerRef}
+      className="relative w-full h-full bg-black overflow-hidden"
+      style={{ touchAction: 'none' }}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+    >
+      {/* Video rendered natively — never display:none, so mobile keeps decoding frames */}
+      <video
+        ref={videoRef}
+        autoPlay
+        muted
+        playsInline
+        className="absolute inset-0 w-full h-full"
+        style={{ objectFit: 'cover' }}
       />
+
+      {/* Off-screen canvas used only for pixel sampling — not displayed */}
+      <canvas ref={samplingCanvasRef} style={{ display: 'none' }} />
+
       {cameraState === 'requesting' && (
-        <div className="absolute inset-0 flex items-center justify-center text-white/50 text-xs">
+        <div className="absolute inset-0 flex items-center justify-center text-white/50 text-xs z-10">
           Requesting camera…
         </div>
       )}
+
       {cursor && <Crosshair x={cursor.x} y={cursor.y} />}
 
-      <div className="absolute top-2 right-2 bg-black/60 text-white/70 text-[10px] px-2 py-0.5 rounded pointer-events-none">
+      <div className="absolute top-2 right-2 bg-black/60 text-white/70 text-[10px] px-2 py-0.5 rounded pointer-events-none z-10">
         CURRENT
       </div>
       {currentSample && (
         <div
-          className="absolute top-2 left-2 w-5 h-5 rounded-full border border-white/40 shadow"
+          className="absolute top-2 left-2 w-5 h-5 rounded-full border border-white/40 shadow z-10"
           style={{ background: `rgb(${currentSample.r},${currentSample.g},${currentSample.b})` }}
         />
       )}
       {!cursor && cameraState === 'active' && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
           <p className="text-white/40 text-xs">Tap to sample current color</p>
         </div>
       )}
